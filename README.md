@@ -1,38 +1,39 @@
-# customer-churn-prediction
-End-to-end machine learning project to predict customer churn. Includes a model trained on the Telco dataset and deployed as a web service using Flask, Docker, and Google Cloud Run.
-# Customer Churn Prediction Project
+# Bank Customer Churn Prediction
 
-This project is an end-to-end machine learning solution to predict customer churn for a telecommunications company. The model is trained on the [Telco Customer Churn dataset](https://www.kaggle.com/datasets/blastchar/telco-customer-churn) and deployed as a live web service.
+This project is an end-to-end machine learning solution to predict customer churn for a bank. The model is trained on the [Kaggle Churn Modelling dataset](https://www.kaggle.com/datasets/sharmilacharity/churn-modelling) and deployed as a live web service using Flask, Docker, and Google Cloud Run.
+
+
 
 **Live Service URL:** `https://churn-service-app-300316357465.us-central1.run.app/predict`
 
 ## 1. Problem Description
 
-The goal of this project is to build a model that can predict which customers are at high risk of "churning" (leaving the company). In the competitive telecom industry, retaining existing customers is far more cost-effective than acquiring new ones.
+The goal of this project is to build a model that can predict which customers are at high risk of "exiting" (churning) their bank accounts. Identifying these at-risk customers allows the bank to proactively engage them with retention offers and incentives.
 
-This service provides a "churn probability" for any given customer, allowing the business to:
-* Identify high-risk customers.
-* Target them with special retention offers, discounts, or improved customer service.
-* Reduce overall churn and increase revenue.
-
-The provided dataset is imbalanced (73.5% not churn, 26.5% churn), which requires the use of metrics like AUC-ROC instead of accuracy.
+This service provides a "churn probability" for any given customer, helping the bank reduce customer attrition and protect its revenue. The dataset is imbalanced, so the model is evaluated using the AUC-ROC metric.
 
 ## 2. Exploratory Data Analysis (EDA)
 
-My analysis (in `notebook.ipynb`) was performed to find the key drivers of churn. After cleaning the data, I used **Mutual Information (MI)** to get a quantitative score for each feature's importance.
+My analysis (in `notebook.ipynb`) was performed to find the key drivers of churn. After cleaning the data, I used **Mutual Information (MI)** to get a quantitative score for each feature's importance against the `churn` target.
 
-The top predictors are, by far, the financial and contract-related features:
+The top predictors are, by a large margin, financial and personal factors:
 
 | Feature | Mutual Information Score |
 | :--- | :--- |
-| **TotalCharges** | **0.537** |
-| **MonthlyCharges** | **0.173** |
-| **Contract** | **0.098** |
-| **tenure** | **0.079** |
+| **estimated_salary** | **0.505** |
+| **balance** | **0.360** |
+| **age** | **0.074** |
+| **num_of_products** | **0.069** |
+| credit_score | 0.026 |
+| geography | 0.014 |
+| ... | ... |
+| tenure | 0.0007 |
+| has_cr_card | 0.0000 |
 
 **Key Insights:**
-* **Financials are Key:** The MI scores show that `TotalCharges` is the strongest predictor. This is logical, as it's highly correlated with `tenure`—customers who have been with the company longer (and thus have higher total charges) are much less likely to churn.
-* **Actionable Drivers:** The most important *actionable* drivers are `MonthlyCharges` and `Contract`. My visual analysis confirmed that customers on "Month-to-month" contracts churn at a *dramatically* higher rate (over 40%) compared to those on "Two year" contracts (under 3%).
+* **Top Drivers:** The most powerful predictors are `estimated_salary` and `balance`. The relationship is complex, as simple box plots showed that customers who churned actually had a *higher* median balance.
+* **Useless Features (Noise):** `tenure` and `has_cr_card` showed a near-zero MI score. These features were dropped from the model to reduce noise and improve performance.
+* **Behavioral Signal:** Customers with **3 or 4 products** had a *dramatically* higher churn rate than those with 1 or 2, making this a key high-risk group.
 
 ## 3. Model Training & Selection
 
@@ -40,21 +41,24 @@ I trained and evaluated four different classification models. Since the dataset 
 
 | Model | Validation AUC |
 | :--- | :--- |
-| **Logistic Regression (Baseline)** | **0.8371** |
-| Decision Tree | 0.8146 |
-| Random Forest | 0.8133 |
-| XGBoost | 0.8265 |
+| **Random Forest** | **0.8549** |
+| XGBoost | 0.8448 |
+| Decision Tree | 0.8294 |
+| Logistic Regression | 0.6871 |
 
-The baseline `LogisticRegression` model performed the best. I then tuned its `C` (regularization) parameter and found the optimal value to be `C=0.1`.
+The `RandomForestClassifier` was the clear winner. I then tuned its hyperparameters using `GridSearchCV` and found the optimal settings to be:
+* `max_depth`: 10
+* `min_samples_leaf`: 5
+* `n_estimators`: 200
 
-The final model, trained on the full 80% of the data (train + validation), achieved an **AUC score of 0.8616 on the final 20% test set.**
+The final model, trained on the full 80% of the data (train + validation), achieved an **AUC score of 0.8696 on the final 20% test set.**
 
 ## 4. Reproducibility & Deployment
 
 This project is fully reproducible and deployable.
 
 ### To Train the Model:
-This will create `model.bin` and `dv.bin` from scratch.
+This will create `model.bin` and `dv.bin` from scratch using the best parameters.
 1.  Set up a virtual environment and install dependencies:
     ```bash
     pip install -r requirements.txt
@@ -95,30 +99,18 @@ import requests
 # This is the public URL for the deployed service
 url = '[https://churn-service-app-300316357465.us-central1.run.app/predict](https://churn-service-app-300316357465.us-central1.run.app/predict)'
 
-# A sample customer
+# A sample customer from the bank dataset
 customer = {
-    'gender': 'female',
-    'seniorcitizen': 0,
-    'partner': 'yes',
-    'dependents': 'no',
-    'tenure': 1,
-    'phoneservice': 'no',
-    'multiplelines': 'no_phone_service',
-    'internetservice': 'dsl',
-    'onlinesecurity': 'no',
-    'onlinebackup': 'yes',
-    'deviceprotection': 'no',
-    'techsupport': 'no',
-    'streamingtv': 'no',
-    'streamingmovies': 'no',
-    'contract': 'month-to-month',
-    'paperlessbilling': 'yes',
-    'paymentmethod': 'electronic_check',
-    'monthlycharges': 29.85,
-    'totalcharges': 29.85
+    'credit_score': 619,
+    'geography': 'France',
+    'gender': 'Female',
+    'age': 42,
+    'balance': 0.0,
+    'num_of_products': 1,
+    'is_active_member': 1,
+    'estimated_salary': 101348.88
 }
 
 response = requests.post(url, json=customer)
 print(response.json())
-
-# Expected Output: {'churn_probability': 0.4545...}
+{ "churn_probability": 0.26235239052245984 }
